@@ -197,3 +197,37 @@ class Watchtower:
             json.dump(report, f, indent=2, default=str)
         
         return report
+
+
+def run(data: pd.DataFrame) -> Dict:
+    """
+    Public entrypoint for Watchtower.
+    Used by Streamlit and external callers.
+    
+    Args:
+        data: DataFrame with prediction logs (must have 'timestamp', 'prediction', 'confidence', and feature columns)
+        
+    Returns:
+        Dictionary with risk assessment, signals, and alerts
+    """
+    # Create Watchtower instance
+    engine = Watchtower()
+    
+    # Initialize baseline from the data
+    baseline_initialized = engine.initialize_baseline(data, timestamp_col='timestamp')
+    
+    if not baseline_initialized:
+        return {
+            'error': 'Failed to initialize baseline. Insufficient data.',
+            'risk_assessment': None,
+            'signals': None,
+            'alert': None
+        }
+    
+    # Assess risk on the data
+    results = engine.assess_risk(data, timestamp_col='timestamp')
+    
+    # Add system status for dashboard
+    results['system_status'] = engine.get_system_status()
+    
+    return results
