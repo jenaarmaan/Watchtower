@@ -19,13 +19,14 @@ from collections import defaultdict
 class SignalComputer:
     """Computes various risk signals from prediction logs."""
     
-    def __init__(self, baseline_window_days: int = 7, min_samples: int = 100):
+    def __init__(self, baseline_window_days: int = 7, min_samples: int = 30):
         """
         Initialize signal computer.
         
         Args:
             baseline_window_days: Days to use for baseline statistics
             min_samples: Minimum samples required for reliable computation
+                NOTE: Demo threshold (30). Production systems should tune this per signal.
         """
         self.baseline_window_days = baseline_window_days
         self.min_samples = min_samples
@@ -105,7 +106,8 @@ class SignalComputer:
         
         if len(current_df) < self.min_samples:
             return {
-                'error': f'Insufficient samples: {len(current_df)} < {self.min_samples}',
+                'status': 'insufficient_samples',
+                'message': f'{len(current_df)} < {self.min_samples}',
                 'signals': {}
             }
         

@@ -24,7 +24,7 @@ class Watchtower:
     
     def __init__(self,
                  baseline_window_days: int = 7,
-                 min_samples: int = 100,
+                 min_samples: int = 30,
                  signal_weights: Optional[Dict[str, float]] = None,
                  risk_threshold_high: float = 70.0,
                  risk_threshold_medium: float = 40.0):
@@ -34,6 +34,7 @@ class Watchtower:
         Args:
             baseline_window_days: Days to use for baseline statistics
             min_samples: Minimum samples required for reliable computation
+                NOTE: Demo threshold (30). Production systems should tune this per signal.
             signal_weights: Weights for signal aggregation
             risk_threshold_high: High risk threshold (0-100)
             risk_threshold_medium: Medium risk threshold (0-100)
@@ -94,6 +95,34 @@ class Watchtower:
         # Compute signals
         signals = self.signal_computer.compute_signals(df, timestamp_col)
         
+        # Handle insufficient samples - convert to system risk
+        if signals.get('status') == 'insufficient_samples':
+            return {
+                'risk_assessment': {
+                    'risk_score': 65.0,
+                    'risk_level': 'medium',
+                    'trend': 'unknown',
+                    'signal_breakdown': {},
+                    'baseline_risk_score': None,
+                    'last_stable_checkpoint': None
+                },
+                'signals': signals,
+                'alert': {
+                    'severity': 'medium',
+                    'message': f"Low sample volume detected ({signals.get('message', 'unknown')})",
+                    'reason_labels': ['insufficient_samples'],
+                    'recommendations': [
+                        f"Collect more data: {signals.get('message', 'unknown')}",
+                        'Risk assessment may be unreliable with low sample count',
+                        'Consider increasing data collection window'
+                    ]
+                },
+                'meta': {
+                    'status': 'insufficient_samples'
+                }
+            }
+        
+        # Handle other errors (backward compatibility)
         if 'error' in signals:
             return {
                 'error': signals['error'],
@@ -227,7 +256,18 @@ def run(data: pd.DataFrame) -> Dict:
     # Assess risk on the data
     results = engine.assess_risk(data, timestamp_col='timestamp')
     
+    # Ensure results is always a dict (safety check)
+    if not isinstance(results, dict):
+        return {
+            'error': 'Unexpected result type from assess_risk()',
+            'risk_assessment': None,
+            'signals': None,
+            'alert': None,
+            'system_status': None
+        }
+    
     # Add system status for dashboard
     results['system_status'] = engine.get_system_status()
     
+    # Explicitly return dict (guaranteed contract)
     return results

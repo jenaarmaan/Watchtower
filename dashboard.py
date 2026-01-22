@@ -495,3 +495,125 @@ class WatchtowerDashboard:
             {rec_items}
         </div>
         """
+
+
+import streamlit as st
+
+def render(results):
+    """
+    Public dashboard renderer for Watchtower.
+    """
+    # Defensive check: ensure results is a dict
+    if results is None:
+        st.error("⚠️ Watchtower returned no results.")
+        return
+    
+    if not isinstance(results, dict):
+        st.error(f"⚠️ Watchtower returned invalid results type: {type(results)}")
+        return
+    
+    # Check for errors in results
+    if 'error' in results:
+        st.error(f"❌ Error: {results['error']}")
+        return
+    
+    st.subheader("📊 Model Health Overview")
+
+    # Extract risk score from nested structure
+    risk_assessment = results.get("risk_assessment", {})
+    risk_score = risk_assessment.get("risk_score", None)
+    risk_level = risk_assessment.get("risk_level", "unknown")
+    
+    if risk_score is not None:
+        # Color code based on risk level
+        if risk_level == "high":
+            delta_color = "inverse"
+        elif risk_level == "medium":
+            delta_color = "normal"
+        else:
+            delta_color = "off"
+        
+        st.metric("Model Risk Score", f"{risk_score:.1f} / 100", 
+                 delta=f"{risk_level.upper()} RISK", delta_color=delta_color)
+    else:
+        st.warning("Risk score not available")
+
+    # Alerts
+    alert = results.get("alert", None)
+    if alert:
+        st.subheader("🚨 Active Alerts")
+        severity = alert.get("severity", "medium")
+        message = alert.get("message", "Alert detected")
+        
+        if severity == "high" or severity == "critical":
+            st.error(f"**{severity.upper()}**: {message}")
+        else:
+            st.warning(f"**{severity.upper()}**: {message}")
+        
+        # Show recommendations if available
+        recommendations = alert.get("recommendations", [])
+        if recommendations:
+            st.subheader("💡 Recommended Actions")
+            for i, rec in enumerate(recommendations, 1):
+                st.info(f"{i}. {rec}")
+    else:
+        st.success("✅ No critical alerts detected.")
+
+    # Signal details (drift and confidence)
+    signals = results.get("signals", {})
+    signal_data = signals.get("signals", {})
+    
+    if signal_data:
+        st.subheader("📈 Drift Signals")
+        
+        # Feature drift
+        if "feature_drift" in signal_data:
+            drift_info = signal_data["feature_drift"]
+            drift_score = drift_info.get("score", 0.0)
+            st.metric("Feature Drift Score", f"{drift_score:.3f}", 
+                     help="Measures distribution shift in input features")
+            if "details" in drift_info:
+                with st.expander("Feature Drift Details"):
+                    st.json(drift_info["details"])
+        
+        # Prediction drift
+        if "prediction_drift" in signal_data:
+            pred_drift = signal_data["prediction_drift"]
+            pred_score = pred_drift.get("score", 0.0)
+            st.metric("Prediction Drift Score", f"{pred_score:.3f}",
+                     help="Measures shift in prediction distribution")
+            if "details" in pred_drift:
+                with st.expander("Prediction Drift Details"):
+                    st.json(pred_drift["details"])
+
+        # Confidence signals
+        st.subheader("🔍 Confidence Signals")
+        
+        if "confidence_collapse" in signal_data:
+            conf_info = signal_data["confidence_collapse"]
+            conf_score = conf_info.get("score", 0.0)
+            st.metric("Confidence Collapse Score", f"{conf_score:.3f}",
+                     help="Measures drop in model confidence")
+            if "details" in conf_info:
+                with st.expander("Confidence Details"):
+                    st.json(conf_info["details"])
+        
+        # Out of range
+        if "out_of_range" in signal_data:
+            oor_info = signal_data["out_of_range"]
+            oor_score = oor_info.get("score", 0.0)
+            st.metric("Out-of-Range Score", f"{oor_score:.3f}",
+                     help="Measures rate of unseen input values")
+            if "details" in oor_info:
+                with st.expander("Out-of-Range Details"):
+                    st.json(oor_info["details"])
+
+    # Signal breakdown from risk assessment
+    signal_breakdown = risk_assessment.get("signal_breakdown", {})
+    if signal_breakdown:
+        st.subheader("📊 Signal Contribution Breakdown")
+        breakdown_data = {
+            name.replace("_", " ").title(): data.get("contribution", 0.0)
+            for name, data in signal_breakdown.items()
+        }
+        st.bar_chart(breakdown_data)
