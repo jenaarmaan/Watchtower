@@ -285,3 +285,48 @@ class PredictionLogGenerator:
         })
         
         return df
+
+
+def generate_data(n: int, drift_level: float = 0.3) -> pd.DataFrame:
+    """
+    Generate synthetic prediction logs with optional drift.
+    
+    Args:
+        n: Total number of samples to generate
+        drift_level: Drift intensity (0.0 to 1.0). Higher values = more drift.
+        
+    Returns:
+        DataFrame with prediction logs including baseline and drift data
+    """
+    generator = PredictionLogGenerator(seed=42)
+    
+    # Generate baseline data (60% of samples)
+    n_baseline = int(n * 0.6)
+    baseline_df = generator.generate_baseline_data(
+        n_samples=n_baseline,
+        n_features=5,
+        days=7
+    )
+    
+    # Generate decay scenario data (40% of samples) if drift_level > 0
+    if drift_level > 0:
+        n_decay = n - n_baseline
+        # Use combined scenarios based on drift_level
+        scenarios = {
+            'data_drift': drift_level * 0.4,
+            'confidence_collapse': drift_level * 0.3,
+            'out_of_range': drift_level * 0.2,
+            'prediction_drift': drift_level * 0.1
+        }
+        decay_df = generator.generate_combined_data(
+            baseline_df=baseline_df,
+            scenarios=scenarios,
+            n_samples=n_decay
+        )
+        
+        # Combine baseline and decay data
+        combined_df = pd.concat([baseline_df, decay_df], ignore_index=True)
+        return combined_df
+    else:
+        # No drift, return just baseline
+        return baseline_df
